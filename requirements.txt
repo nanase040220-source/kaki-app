@@ -1,0 +1,8 @@
+opencv-python
+numpy
+ultralytics
+uvicorn
+fastapi
+python-multipart
+jinja2
+opencv-python-headless

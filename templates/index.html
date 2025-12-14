@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>柿の熟度判定AI</title>
+    <style>
+        body { font-family: sans-serif; text-align: center; padding: 20px; }
+        .container { max-width: 600px; margin: 0 auto; }
+        video, img, canvas { max-width: 100%; border-radius: 8px; margin-top: 10px; }
+        #camera-area, #result-area { display: none; margin-top: 20px; border: 1px solid #ddd; padding: 10px; }
+        .btn { padding: 10px 20px; font-size: 16px; cursor: pointer; margin: 5px; }
+        .btn-primary { background-color: #007bff; color: white; border: none; border-radius: 5px; }
+        .btn-success { background-color: #28a745; color: white; border: none; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🍅 柿の熟度判定AI</h1>
+
+        <div>
+            <button class="btn" onclick="openCamera()">📷 カメラを起動</button>
+            <input type="file" id="fileInput" accept="image/*" style="display: none;" onchange="handleFileUpload(this)">
+            <button class="btn" onclick="document.getElementById('fileInput').click()">📁 画像を選択</button>
+        </div>
+
+        <div id="camera-area">
+            <video id="video" autoplay playsinline></video>
+            <br>
+            <button class="btn btn-primary" onclick="captureAndAnalyze()">📸 撮影して判定</button>
+            <button class="btn" onclick="closeCamera()">閉じる</button>
+            <canvas id="canvas" style="display: none;"></canvas>
+        </div>
+
+        <div id="result-area">
+            <h2>判定結果</h2>
+            <p id="loading-msg" style="display:none;">AI解析中...</p>
+            <div id="result-text" style="font-weight: bold; font-size: 1.2em; margin: 10px 0;"></div>
+            <img id="result-image" alt="Result Image">
+        </div>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const cameraArea = document.getElementById('camera-area');
+        const resultArea = document.getElementById('result-area');
+        let stream = null;
+
+        // カメラ起動
+        async function openCamera() {
+            resultArea.style.display = 'none';
+            cameraArea.style.display = 'block';
+            try {
+                // スマホの外カメラを優先
+                stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: "environment" } 
+                });
+                video.srcObject = stream;
+            } catch (err) {
+                alert("カメラの起動に失敗しました: " + err);
+            }
+        }
+
+        // カメラ停止
+        function closeCamera() {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+            cameraArea.style.display = 'none';
+        }
+
+        // 撮影してAPIへ送信
+        function captureAndAnalyze() {
+            // キャンバスに現在のフレームを描画
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+
+            // 画像データをBlobとして取得
+            canvas.toBlob(function(blob) {
+                sendToApi(blob);
+                closeCamera();
+            }, 'image/jpeg');
+        }
+
+        // ファイルアップロード時の処理
+        function handleFileUpload(input) {
+            if (input.files && input.files[0]) {
+                sendToApi(input.files[0]);
+            }
+        }
+
+        // API送信処理
+        async function sendToApi(imageBlob) {
+            resultArea.style.display = 'block';
+            document.getElementById('loading-msg').style.display = 'block';
+            document.getElementById('result-text').innerText = "";
+            document.getElementById('result-image').style.display = 'none';
+
+            const formData = new FormData();
+            formData.append('file', imageBlob, 'image.jpg');
+
+            try {
+                const response = await fetch('http://localhost:8000/analyze', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+                
+                document.getElementById('loading-msg').style.display = 'none';
+                
+                if (data.processed_image) {
+                    document.getElementById('result-image').src = data.processed_image;
+                    document.getElementById('result-image').style.display = 'block';
+                    document.getElementById('result-text').innerText = data.result_text;
+                    document.getElementById('result-text').style.color = data.status.includes('OK') ? 'green' : 'red';
+                } else {
+                    document.getElementById('result-text').innerText = data.result_text || "エラーが発生しました";
+                }
+
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('loading-msg').innerText = "通信エラーが発生しました";
+            }
+        }
+    </script>
+</body>
+</html>
